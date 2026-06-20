@@ -228,11 +228,18 @@
         body:   JSON.stringify(payload)
       });
 
-      // no-cors means we can't read the response, but if no error was thrown it went through
-      document.getElementById("form-area").style.display   = "none";
-      document.getElementById("success-area").style.display = "block";
-      document.getElementById("success-detail").textContent =
-        name + " (" + email + ") — logged at " + new Date().toLocaleTimeString("en-NP", {timeZone: "Asia/Kathmandu"});
+document.getElementById("success-detail").textContent =
+  name + " (" + email + ") — logged at " +
+  new Date().toLocaleString("en-GB", {
+    timeZone: "Asia/Kathmandu",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
 
     } catch (err) {
       btn.disabled     = false;
