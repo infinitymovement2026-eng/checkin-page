@@ -52,6 +52,7 @@
     border: 1px solid var(--border-tertiary); border-radius: 8px;
     background: var(--bg-primary); color: var(--text-primary);
   }
+  .field input[readonly] { background: var(--bg-secondary); color: var(--text-secondary); }
   .net-row {
     display: flex; align-items: center; gap: 10px; margin-bottom: 1.5rem;
     padding: 10px 14px; background: var(--bg-secondary);
@@ -64,6 +65,11 @@
     border-radius: 8px; padding: 14px 16px; margin-bottom: 1.25rem;
   }
   .warning-box p { margin: 0; font-size: 14px; color: var(--text-danger); line-height: 1.5; }
+  .success-box {
+    border: 1px solid #b7d79a; background: var(--bg-success);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 1.25rem; display: none;
+  }
+  .success-box p { margin: 0; font-size: 14px; color: var(--text-success); line-height: 1.5; }
   .submit-btn {
     width: 100%; padding: 10px; font-size: 15px; cursor: pointer;
     background: var(--bg-info); color: var(--text-info);
@@ -96,8 +102,12 @@
 
     <div id="warning-area" style="display:none;" class="warning-box">
       <p><strong>Access restricted.</strong> This check-in form can only be filled from the
-      <strong id="allowed-ssid-name">OFFICE_WIFI</strong> network. Please connect to the correct
+      <strong id="allowed-ssid-name">Infinity Support</strong> network. Please connect to the correct
       WiFi and try again.</p>
+    </div>
+
+    <div id="success-area" class="success-box">
+      <p><strong>Check-in submitted.</strong> Your response has been recorded.</p>
     </div>
 
     <hr class="divider" />
@@ -105,19 +115,22 @@
     <div id="form-area">
       <div class="field">
         <label>Full name *</label>
-        <select id="name-field" required>
+        <select id="name-field" required onchange="syncEmail()">
           <option value="">— Choose —</option>
-          <option>Prabin Tamang</option>
-          <option>Aditya Bdr Shah</option>
-          <option>Drabya Rana</option>
-          <option>Sunil Thapa</option>
-          <option>Krish Sunar</option>
-          <option>Kabita Bhusal</option>
-          <option>Niharika Khadgi</option>
-          <option>Pragya Shrestha</option>
-          <option>Aayushi Shahi</option>
-          <option>Kushal Regmi</option>
+          <option data-email="pravintamang534@gmail.com">Prabin Tamang</option>
+          <option data-email="shahaditya9898@gmail.com">Aditya Bdr Shah</option>
+          <option data-email="sunilthaparai0987@gmail.com">Sunil Thapa</option>
+          <option data-email="kreeshsunwar@gmail.com">Krish Sunar</option>
+          <option data-email="kabitabhusal219@gmail.com">Kabita Bhusal</option>
+          <option data-email="niharikakhadgi.mun@gmail.com">Niharika Khadgi</option>
+          <option data-email="shresthapragya89@gmail.com">Pragya Shrestha</option>
+          <option data-email="nainaaashahi@gmail.com">Aayushi Shahi</option>
+          <option data-email="kushalregmi998877@gmail.com">Kushal Regmi</option>
         </select>
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="text" id="email-display" readonly placeholder="Auto-filled after selecting name" />
       </div>
       <button class="submit-btn" id="submit-btn" disabled onclick="submitForm()">
         Submit check-in
@@ -127,17 +140,31 @@
   </div>
 </div>
 
+<form id="hidden-gform"
+      action="https://docs.google.com/forms/u/0/d/e/1FAIpQLSfuB-FTj_dsalLDv1Tg8aQfRdiYwX8Sa10ulz8NiVrhDqxdqQ/formResponse"
+      method="POST" target="hidden-iframe" style="display:none;">
+  <input type="hidden" name="entry.2086456435" id="hidden-name-field" />
+  <input type="hidden" name="entry.669541106" id="hidden-email-field" />
+</form>
+<iframe name="hidden-iframe" style="display:none;"></iframe>
+
 <script>
-  // ====== CONFIG: edit these three values ======
-  const ALLOWED_SSID   = "Infinity Support";  //display name only, shown to users
-  const ALLOWED_WAN IP = "202.51.69.41"
-  const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfuB-FTj_dsalLDv1Tg8aQfRdiYwX8Sa10ulz8NiVrhDqxdqQ/viewform";
-  // ===============================================
+  // ====== CONFIG ======
+  const ALLOWED_SSID   = "Infinity Support";
+  const ALLOWED_WAN_IP = "202.51.69.41";
+  // =====================
 
   document.getElementById("allowed-ssid-name").textContent = ALLOWED_SSID;
 
   let detectedIP = "";
   let accessAllowed = false;
+
+  function syncEmail() {
+    const sel = document.getElementById("name-field");
+    const opt = sel.options[sel.selectedIndex];
+    const email = opt.getAttribute("data-email") || "";
+    document.getElementById("email-display").value = email;
+  }
 
   async function detectNetwork() {
     const ssidDisplay = document.getElementById("net-ssid-display");
@@ -187,12 +214,23 @@
   function submitForm() {
     if (!accessAllowed) return;
     const name = document.getElementById("name-field").value;
-    if (!name) {
+    const email = document.getElementById("email-display").value;
+    if (!name || !email) {
       alert("Please select your name.");
       return;
     }
-    window.open(FORM_URL, "_blank");
-    document.getElementById("submit-note").textContent = "Google Form opened — complete and submit there.";
+
+    document.getElementById("hidden-name-field").value = name;
+    document.getElementById("hidden-email-field").value = email;
+    document.getElementById("hidden-gform").submit();
+
+    document.getElementById("submit-btn").disabled = true;
+    document.getElementById("submit-note").textContent = "Submitting…";
+
+    setTimeout(function() {
+      document.getElementById("form-area").style.display = "none";
+      document.getElementById("success-area").style.display = "block";
+    }, 1200);
   }
 
   detectNetwork();
