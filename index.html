@@ -146,8 +146,8 @@
 
 <script>
   // ====== CONFIG ======
-  const ALLOWED_WAN_IP  = "43.231.210.154";
-  const SCRIPT_URL      = "https://script.google.com/macros/s/AKfycbwB0g_7rc-jJGOnZQl_x9VL_362zF3xDkRYHyOgMN4uSBM_wEtvCSa5eUGnRlZJuCeZWg/exec";
+  const ALLOWED_WAN_IP  = "202.51.69.41";
+  const SCRIPT_URL      = "https://script.google.com/macros/s/AKfycbwH2PlUuu1YM9T2w2l2jO8hib-ycDaZy389rhIEiQju67sDFcVDDQYpIum71gLe3kjYNQ/exec";
   // =====================
 
   let detectedIP    = "";
@@ -228,13 +228,11 @@
         body:   JSON.stringify(payload)
       });
 
-document.getElementById("form-area").style.display = "none";
-document.getElementById("success-area").style.display = "block";
-document.getElementById("success-detail").textContent =
-  name + " (" + email + ") — logged at " +
-  new Date().toLocaleTimeString("en-NP", {
-    timeZone: "Asia/Kathmandu"
-  });
+      // no-cors means we can't read the response, but if no error was thrown it went through
+      document.getElementById("form-area").style.display   = "none";
+      document.getElementById("success-area").style.display = "block";
+      document.getElementById("success-detail").textContent =
+        name + " (" + email + ") — logged at " + new Date().toLocaleTimeString("en-NP", {timeZone: "Asia/Kathmandu"});
 
     } catch (err) {
       btn.disabled     = false;
