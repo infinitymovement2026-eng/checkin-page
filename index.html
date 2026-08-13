@@ -52,13 +52,13 @@
     background: var(--bg-primary); color: var(--text-primary);
   }
   .field input[readonly] { background: var(--bg-secondary); color: var(--text-secondary); }
-  .net-row {
+  .location-row {
     display: flex; align-items: center; gap: 10px; margin-bottom: 1rem;
     padding: 10px 14px; background: var(--bg-secondary);
     border-radius: 8px; border: 1px solid var(--border-tertiary);
   }
-  .net-label { font-size: 13px; color: var(--text-secondary); flex: 1; }
-  .net-value { font-size: 13px; font-weight: 500; }
+  .location-label { font-size: 13px; color: var(--text-secondary); flex: 1; }
+  .location-value { font-size: 13px; font-weight: 500; }
   .warning-box {
     border: 1px solid #e9b3b3; background: var(--bg-danger);
     border-radius: 8px; padding: 14px 16px; margin-bottom: 1.25rem;
@@ -79,6 +79,12 @@
   .submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .divider { border: none; border-top: 1px solid var(--border-tertiary); margin: 1.25rem 0; }
   #detection-note { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; margin-bottom: 0; }
+  .location-btn {
+    padding: 6px 12px; font-size: 12px; background: var(--bg-info);
+    color: var(--text-info); border: 1px solid var(--border-info);
+    border-radius: 6px; cursor: pointer; font-weight: 500;
+  }
+  .location-btn:hover { opacity: 0.8; }
 </style>
 </head>
 <body>
@@ -92,18 +98,21 @@
       <p style="margin:4px 0 0; font-size:13px; color:var(--text-secondary);">Infinity Support — submit your daily update</p>
     </div>
 
-    <!-- Network status -->
-    <div class="net-row">
-      <span class="net-label">Network</span>
-      <span class="net-value" id="net-ssid-display">Detecting…</span>
-      <span class="badge badge-info" id="net-badge" style="display:none;"></span>
+    <!-- Location status -->
+    <div class="location-row">
+      <span class="location-label">Location</span>
+      <span class="location-value" id="location-display">Detecting…</span>
+      <span class="badge badge-info" id="location-badge" style="display:none;"></span>
+    </div>
+    <div style="text-align: right; margin-bottom: 0.75rem;">
+      <button class="location-btn" onclick="detectLocation()">🔄 Refresh</button>
     </div>
     <p id="detection-note"></p>
 
     <!-- Access blocked warning -->
     <div id="warning-area" style="display:none;" class="warning-box">
       <p><strong>Access restricted.</strong> This check-in can only be submitted from the
-      <strong>Infinity Support</strong> WiFi network. Please connect and try again.</p>
+      <strong>Infinity Support office location</strong>. Please ensure you are within the office area and try again.</p>
     </div>
 
     <hr class="divider" />
@@ -118,8 +127,6 @@
           <option data-email="shahaditya9898@gmail.com">Aditya Bdr Shah</option>
           <option data-email="sunilthaparai0987@gmail.com">Sunil Thapa</option>
           <option data-email="kreeshsunwar@gmail.com">Krish Sunar</option>
-          <option data-email="kabitabhusal219@gmail.com">Kabita Bhusal</option>
-          <option data-email="niharikakhadgi.mun@gmail.com">Niharika Khadgi</option>
           <option data-email="shresthapragya89@gmail.com">Pragya Shrestha</option>
           <option data-email="nainaaashahi@gmail.com">Aayushi Shahi</option>
           <option data-email="kushalregmi998877@gmail.com">Kushal Regmi</option>
@@ -149,12 +156,30 @@
 
 <script>
   // ====== CONFIG ======
-  const ALLOWED_WAN_IP  = "182.93.78.173";
-  const SCRIPT_URL      = "https://script.google.com/macros/s/AKfycbwH2PlUuu1YM9T2w2l2jO8hib-ycDaZy389rhIEiQju67sDFcVDDQYpIum71gLe3kjYNQ/exec";
+  const ALLOWED_LOCATIONS = [
+    {
+      name: "Infinity Support - Kathmandu",
+      lat: 27.727004,      // Your office latitude
+      lng: 85.333481,      // Your office longitude
+      radiusMeters: 150  // 150m radius
+    }
+    // Add more locations if needed:
+    // {
+    //   name: "Infinity Support - Branch",
+    //   lat: 27.7050,
+    //   lng: 85.3300,
+    //   radiusMeters: 150
+    // }
+  ];
+  
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwH2PlUuu1YM9T2w2l2jO8hib-ycDaZy389rhIEiQju67sDFcVDDQYpIum71gLe3kjYNQ/exec";
   // =====================
 
-  let detectedIP    = "";
-  let accessAllowed = false;
+  let userLat        = null;
+  let userLng        = null;
+  let userAccuracy   = null;
+  let matchedLocation = null;
+  let accessAllowed  = false;
 
   function syncEmail() {
     const sel   = document.getElementById("name-field");
@@ -163,46 +188,118 @@
     document.getElementById("email-display").value = email;
   }
 
-  async function detectNetwork() {
-    const ssidDisplay = document.getElementById("net-ssid-display");
-    const badge       = document.getElementById("net-badge");
-    const warning     = document.getElementById("warning-area");
-    const submitBtn   = document.getElementById("submit-btn");
-    const note        = document.getElementById("detection-note");
+  // Haversine formula: calculates distance between two coordinates in meters
+  function calculateDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000; // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lng2 - lng1) * Math.PI) / 180;
 
-    ssidDisplay.textContent = "Checking…";
+    const a =
+      Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+      Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // Distance in meters
+  }
+
+  async function detectLocation() {
+    const locationDisplay = document.getElementById("location-display");
+    const badge = document.getElementById("location-badge");
+    const warning = document.getElementById("warning-area");
+    const submitBtn = document.getElementById("submit-btn");
+    const note = document.getElementById("detection-note");
+
+    locationDisplay.textContent = "Getting location…";
     badge.style.display = "none";
-    note.textContent    = "";
+    warning.style.display = "none";
+    submitBtn.disabled = true;
+    note.textContent = "";
 
-    try {
-      const res  = await fetch("https://api.ipify.org?format=json");
-      const data = await res.json();
-      detectedIP = data.ip || "Unknown";
-    } catch (e) {
-      detectedIP = "Unavailable";
-    }
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        locationDisplay.textContent = "Location unavailable";
+        note.textContent = "Your browser doesn't support geolocation.";
+        submitBtn.disabled = true;
+        accessAllowed = false;
+        resolve(false);
+        return;
+      }
 
-    const onOffice = detectedIP === ALLOWED_WAN_IP;
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userLat = position.coords.latitude;
+          userLng = position.coords.longitude;
+          userAccuracy = position.coords.accuracy;
 
-    if (onOffice) {
-      ssidDisplay.textContent  = "Infinity Support";
-      badge.textContent        = "✓ Authorized";
-      badge.className          = "badge badge-ok";
-      badge.style.display      = "inline-flex";
-      warning.style.display    = "none";
-      submitBtn.disabled       = false;
-      accessAllowed            = true;
-      note.textContent         = "WAN IP: " + detectedIP + " — verified.";
-    } else {
-      ssidDisplay.textContent  = "Unknown / external";
-      badge.textContent        = "Not authorized";
-      badge.className          = "badge badge-err";
-      badge.style.display      = "inline-flex";
-      warning.style.display    = "block";
-      submitBtn.disabled       = true;
-      accessAllowed            = false;
-      note.textContent         = "WAN IP: " + detectedIP + " — not allowed.";
-    }
+          // Check if user is within allowed location
+          let authorized = false;
+          matchedLocation = null;
+          let closestDistance = Infinity;
+
+          for (let loc of ALLOWED_LOCATIONS) {
+            const distance = calculateDistance(userLat, userLng, loc.lat, loc.lng);
+            
+            if (distance < closestDistance) {
+              closestDistance = distance;
+            }
+            
+            if (distance <= loc.radiusMeters) {
+              authorized = true;
+              matchedLocation = loc.name;
+              break;
+            }
+          }
+
+          if (authorized) {
+            locationDisplay.textContent = matchedLocation;
+            badge.textContent = "✓ Authorized";
+            badge.className = "badge badge-ok";
+            badge.style.display = "inline-flex";
+            warning.style.display = "none";
+            submitBtn.disabled = false;
+            accessAllowed = true;
+            note.textContent = `📍 ${userLat.toFixed(4)}°, ${userLng.toFixed(4)}° (Accuracy: ±${userAccuracy.toFixed(0)}m)`;
+          } else {
+            locationDisplay.textContent = "Outside office area";
+            badge.textContent = "Not authorized";
+            badge.className = "badge badge-err";
+            badge.style.display = "inline-flex";
+            warning.style.display = "block";
+            submitBtn.disabled = true;
+            accessAllowed = false;
+            note.textContent = `📍 ${userLat.toFixed(4)}°, ${userLng.toFixed(4)}° — ${closestDistance.toFixed(0)}m away (Accuracy: ±${userAccuracy.toFixed(0)}m)`;
+          }
+          resolve(authorized);
+        },
+        (error) => {
+          let errorMsg = "Location permission denied.";
+          if (error.code === error.PERMISSION_DENIED) {
+            errorMsg = "Please enable location permissions in your browser settings.";
+          } else if (error.code === error.POSITION_UNAVAILABLE) {
+            errorMsg = "Location information is unavailable.";
+          } else if (error.code === error.TIMEOUT) {
+            errorMsg = "Location request timed out.";
+          }
+
+          locationDisplay.textContent = "Location denied";
+          note.textContent = errorMsg;
+          badge.textContent = "⚠ Permission required";
+          badge.className = "badge badge-info";
+          badge.style.display = "inline-flex";
+          warning.style.display = "block";
+          submitBtn.disabled = true;
+          accessAllowed = false;
+          resolve(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        }
+      );
+    });
   }
 
   async function submitForm() {
@@ -218,32 +315,41 @@
 
     const btn  = document.getElementById("submit-btn");
     const note = document.getElementById("submit-note");
-    btn.disabled    = true;
+    btn.disabled = true;
     note.textContent = "Submitting…";
 
-    const payload = { name: name, email: email, ip: detectedIP };
+    const payload = {
+      name: name,
+      email: email,
+      location: matchedLocation,
+      latitude: userLat,
+      longitude: userLng,
+      accuracy: userAccuracy,
+      timestamp: new Date().toISOString()
+    };
 
     try {
       await fetch(SCRIPT_URL, {
         method: "POST",
-        mode:   "no-cors",
+        mode: "no-cors",
         headers: { "Content-Type": "application/json" },
-        body:   JSON.stringify(payload)
+        body: JSON.stringify(payload)
       });
 
       // no-cors means we can't read the response, but if no error was thrown it went through
-      document.getElementById("form-area").style.display   = "none";
+      document.getElementById("form-area").style.display = "none";
       document.getElementById("success-area").style.display = "block";
       document.getElementById("success-detail").textContent =
-        name + " (" + email + ") — logged at " + new Date().toLocaleTimeString("en-NP", {timeZone: "Asia/Kathmandu"});
+        name + " (" + email + ") — logged at " + new Date().toLocaleTimeString("en-NP", { timeZone: "Asia/Kathmandu" });
 
     } catch (err) {
-      btn.disabled     = false;
+      btn.disabled = false;
       note.textContent = "Submission failed. Please try again.";
     }
   }
 
-  detectNetwork();
+  // Auto-detect location on page load
+  detectLocation();
 </script>
 </body>
 </html>
